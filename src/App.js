@@ -1,115 +1,187 @@
-import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import { motion, useScroll, useSpring, useTransform } from 'framer-motion';
+import React, {
+  createContext,
+  useRef,
+  useEffect,
+  useContext,
+  useState,
+} from "react";
+import { motion, useScroll, useSpring, useTransform } from "framer-motion";
 
+const ScrollContext = createContext();
+const initialState = {
+  tab: "box-red",
+};
+
+const actions = {
+  CHANGE_TAB: "CHANGE_TAB",
+};
+
+const reducer = (state, action) => {
+  switch (action.type) {
+    case actions.CHANGE_TAB:
+      return {
+        tab: action.tab,
+      };
+    default:
+      return state;
+  }
+};
 function App() {
-  const ghostRefY = useRef();
-  const scrollXRef = useRef();
-  // const [viewportH, setViewportH] = useState(0);
-  const [transformY, setTransformY] = useState(0);
-  const { scrollYProgress } = useScroll();
-  // const { scrollXProgress } = useScroll({ container: scrollXRef });
-  // const [scrollRange, setScrollRange] = useState(0);
-  // const transform = useTransform(
-  //   scrollXProgress,
-  //   [0, 1],
-  //   [0, -viewportH + scrollRange]
-  // );
-  // const physics = { damping: 15, mass: 0.27, stiffness: 55 };
-  // const spring = useSpring(transform, physics);
+  const [state, dispatch] = React.useReducer(reducer, initialState);
 
-  // useLayoutEffect(() => {
-  //   scrollXRef && setScrollRange(scrollXRef.current.scrollWidth);
-  // }, [scrollXRef]);
-
-  // const onResize = useCallback((entries) => {
-  //   for (let entry of entries) {
-  //     setViewportH(entry.contentRect.height);
-  //   }
-  // }, []);
-
-  // useLayoutEffect(() => {
-  //   const resizeObserver = new ResizeObserver((entries) => onResize(entries));
-  //   resizeObserver.observe(ghostRefY.current);
-  //   return () => resizeObserver.disconnect();
-  // }, [onResize]);
+  const value = {
+    tab: state.tab,
+    changeTab: (tab) => {
+      dispatch({ type: actions.CHANGE_TAB, tab });
+    },
+  };
 
   return (
-    <div ref={ghostRefY} className="h-screen">
-      <motion.div
-        style={{ y: transformY }}
-        className="p-8 h-max flex flex-col gap-y-4"
-      >
-        <div className="bg-red-500 h-36">Red</div>
-        <div className="bg-green-500 h-36">Green</div>
-        <div className="bg-blue-500 h-36">Blue</div>
-        <div className="bg-yellow-500 h-36">Yellow</div>
-        <div className="bg-orange-500 h-36">Orange</div>
-        <div className="bg-pink-500 h-36">Pink</div>
-      </motion.div>
-      <Nav
-        scrollYProgress={scrollYProgress}
-        scrollXRef={scrollXRef}
-        setTransformY={setTransformY}
-      />
+    <div>
+      <ScrollContext.Provider value={value}>
+        <ScrollContainer />
+        <ScrollNavigator />
+      </ScrollContext.Provider>
     </div>
   );
 }
 
-const Nav = ({ scrollYProgress, scrollXRef, setTransformY }) => {
-  const ghostRef = useRef();
-  const scrollRef = useRef();
-  const [scrollRange, setScrollRange] = useState(0);
-  const [viewportW, setViewportW] = useState(0);
-  const transform = useTransform(
-    scrollYProgress,
-    [0, 1],
-    [0, -scrollRange + viewportW]
+/**
+ * returns the percent of visible part of the element in viewport
+ * @param {*} el
+ */
+const visibleViewportInPercent = (el) => {
+  const windowHeight =
+    window.innerHeight || document.documentElement.clientHeight;
+  const rect = el.getBoundingClientRect();
+
+  if (rect.bottom < 0 || rect.top > windowHeight) return 0;
+
+  const top = Math.max(0, rect.top);
+  const bottom = Math.min(windowHeight, rect.bottom);
+
+  return ((bottom - top) * 1.0) / rect.height;
+};
+
+const isInViewport = (el) => {
+  const rect = el.getBoundingClientRect();
+
+  return (
+    rect.top >= 0 &&
+    rect.left >= 0 &&
+    rect.bottom <=
+      (window.innerHeight || document.documentElement.clientHeight) &&
+    rect.right <= (window.innerWidth || document.documentElement.clientWidth)
   );
-  const physics = { damping: 15, mass: 0.27, stiffness: 55 };
-  const spring = useSpring(transform, physics);
+};
 
-  useLayoutEffect(() => {
-    scrollRef && setScrollRange(scrollRef.current.scrollWidth);
-  }, [scrollRef]);
+const ScrollContainer = () => {
+  const containerRef = useRef();
+  const { changeTab } = useContext(ScrollContext);
 
-  const onResize = useCallback((entries) => {
-    for (let entry of entries) {
-      setViewportW(entry.contentRect.width);
-    }
+  const { scrollY } = useScroll();
+
+  useEffect(() => {
+    return scrollY.onChange((latest) => {
+      let maxPercent = 0;
+      let maxPercentId = ""; // TODO: current tab id;
+
+      for (const child of containerRef.current.children) {
+        const percent = visibleViewportInPercent(child);
+        if (percent > maxPercent) {
+          maxPercent = percent;
+          maxPercentId = child.id;
+        }
+        if (isInViewport(child)) {
+          maxPercentId = child.id;
+          break;
+        }
+      }
+
+      changeTab(maxPercentId);
+    });
   }, []);
 
-  useLayoutEffect(() => {
-    const resizeObserver = new ResizeObserver((entries) => onResize(entries));
-    resizeObserver.observe(ghostRef.current);
-    return () => resizeObserver.disconnect();
-  }, [onResize]);
+  return (
+    <div ref={containerRef} className="p-2">
+      <div
+        id="box-red"
+        className="bg-red-500 h-[600px] flex justify-center items-center"
+      >
+        Red
+      </div>
+      <div
+        id="box-green"
+        className="bg-green-500 h-[600px] flex justify-center items-center"
+      >
+        Green
+      </div>
+      <div
+        id="box-blue"
+        className="bg-blue-500 h-[600px] flex justify-center items-center"
+      >
+        Blue
+      </div>
+      <div
+        id="box-yellow"
+        className="bg-yellow-500 h-[600px] flex justify-center items-center"
+      >
+        Yellow
+      </div>
+      <div
+        id="box-orange"
+        className="bg-orange-500 h-[600px] flex justify-center items-center"
+      >
+        Orange
+      </div>
+      <div
+        id="box-pink"
+        className="bg-pink-500 h-[600px] flex justify-center items-center"
+      >
+        Pink
+      </div>
+    </div>
+  );
+};
+
+const ScrollNavigator = ({}) => {
+  const carousel = useRef();
+  const [width, setWidth] = useState(0);
+  const { tab } = React.useContext(ScrollContext);
+
+  useEffect(() => {
+    console.log("scroll: ", tab);
+    // setWidth(carousel.current.scrollWidth - carousel.current.offsetWidth);
+  }, [tab]);
+
+  useEffect(() => {
+    setWidth(carousel.current.scrollWidth - carousel.current.offsetWidth);
+  });
 
   return (
     <motion.div
-      ref={scrollXRef}
-      className="fixed bottom-4 w-[80%] transform -translate-x-1/2 left-1/2 h-max rounded-2xl bg-green-200 cursor-pointer overflow-x-hidden"
+      ref={carousel}
+      className="fixed bottom-4 w-[80%] transform -translate-x-1/2 left-1/2 h-max text-lg rounded-full bg-white  overflow-x-hidden"
     >
-      <div ref={scrollRef}>
-        <motion.div
-          drag="x"
-          style={{ x: spring }}
-          onDrag={(event, pan) => {
-            setTransformY(pan.offset.x);
-          }}
-          dragConstraints={scrollRef}
-          className="flex gap-x-1 w-max px-4"
-        >
-          <div className="text-red-500 py-1 px-2 h-max">Red</div>
-          <div className="text-green-500 py-1 px-2 h-max">Green</div>
-          <div className="text-blue-500 py-1 px-2 h-max">Blue</div>
-          <div className="text-yellow-500 py-1 px-2 h-max">Yellow</div>
-          <div className="text-orange-500 py-1 px-2 h-max">Orange</div>
-          <div className="text-pink-500 py-1 px-2 h-max">Pink</div>
-        </motion.div>
-      </div>
-
-      <div ref={ghostRef} className="w-full" />
+      <motion.div
+        drag="x"
+        dragConstraints={{ right: 0, left: -width }}
+        className="flex gap-x-4 w-max px-4"
+      >
+        {["red", "green", "blue", "yellow", "orange", "pink"].map((color) => (
+          <ScrollNavigatorItem id={`box-${color}-tab`} color={color} />
+        ))}
+      </motion.div>
     </motion.div>
+  );
+};
+
+const ScrollNavigatorItem = ({ id, color }) => {
+  return (
+    <div onClick={e => console.log("click: ", id)} id={id} className="py-4 px-4 text-lg flex items-center cursor-pointer">
+      <div className={`bg-${color}-500 rounded-full w-4 h-4 mr-4`} />
+      {color}
+    </div>
   );
 };
 
